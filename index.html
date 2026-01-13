@@ -1,26 +1,27 @@
 <!DOCTYPE html>
-<html>
+<html lang="uk">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AgroWater — Намалювати поле</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <style>
-    #map { height: 80vh; }
-    body { margin: 0; padding: 10px; font-family: Arial; }
+    body { font-family: Arial, sans-serif; margin: 10px; }
+    #map { height: 70vh; margin-top: 10px; }
     .form-group { margin: 10px 0; }
-    input, select, button { padding: 8px; width: 100%; margin-top: 5px; }
+    input, select, button { width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; }
+    #status { color: green; margin-top: 10px; font-weight: bold; }
   </style>
 </head>
 <body>
   <h2>🗺️ Намалювати поле</h2>
-  
+
   <div class="form-group">
     <label>Назва поля:</label>
-    <input type="text" id="fieldName" placeholder="Наприклад: Поле 1">
+    <input type="text" id="fieldName" placeholder="Наприклад: Поле 1" />
   </div>
-  
+
   <div class="form-group">
     <label>Культура:</label>
     <select id="crop">
@@ -28,29 +29,34 @@
       <option value="кукурудза">Кукурудза</option>
       <option value="соняшник">Соняшник</option>
       <option value="ячмінь">Ячмінь</option>
+      <option value="виноград">Виноград</option>
     </select>
   </div>
 
   <div id="map"></div>
-  
   <button onclick="saveField()">✅ Зберегти поле</button>
-  <p id="status" style="color:green; margin-top:10px;"></p>
+  <p id="status"></p>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script src="https://unpkg.com/leaflet.geometryutil@0.10.0/src/leaflet.geometryutil.js"></script>
+
   <script>
     // Отримуємо user_id з URL
     const urlParams = new URLSearchParams(window.location.search);
     const userId = urlParams.get('user_id') || 'test';
 
-    // Ініціалізуємо карту
-    const map = L.map('map').setView([50.45, 30.52], 10); // Київ за замовчуванням
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Ініціалізуємо карту (Київ за замовчуванням)
+    const map = L.map('map').setView([50.45, 30.52], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
 
-    // Додаємо інструмент малювання
+    // Група для малювання
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
+    // Контрол малювання
     const drawControl = new L.Control.Draw({
       edit: { featureGroup: drawnItems },
       draw: {
@@ -67,9 +73,7 @@
     let drawnPolygon = null;
 
     map.on(L.Draw.Event.CREATED, function (e) {
-      if (drawnPolygon) {
-        drawnItems.removeLayer(drawnPolygon);
-      }
+      if (drawnPolygon) drawnItems.removeLayer(drawnPolygon);
       drawnPolygon = e.layer;
       drawnItems.addLayer(drawnPolygon);
     });
@@ -80,37 +84,38 @@
         alert("Спочатку намалюйте поле!");
         return;
       }
+
       const name = document.getElementById('fieldName').value || 'Без назви';
       const crop = document.getElementById('crop').value;
       const coords = drawnPolygon.getLatLngs()[0].map(p => [p.lat, p.lng]);
 
-      // Рахуємо площу (грубий розрахунок)
+      // Розрахунок площі в гектарах
       const areaHa = (L.GeometryUtil.geodesicArea(drawnPolygon.getLatLngs()[0]) / 10000).toFixed(2);
 
-      // Надсилаємо дані на Google Apps Script (налаштуємо завтра)
-      const scriptUrl = "https://script.google.com/macros/s/AKfycbyV220nKc5xj2Zn7yZq75TYzZyAUO1Qp6c7QQxsMJ5SYB530UmZDT1WifAkscxBSOadHQ/exec"; // ← сюди вставиш завтра
-
-      const data = {
-        user_id: userId,
-        field_name: name,
-        crop: crop,
-        area_ha: areaHa,
-        polygon: JSON.stringify(coords)
-      };
+      // 🔴 ЗАМІНИ ЦЕЙ URL НА СВІЙ Google Apps Script!
+      const scriptUrl = "https://script.google.com/macros/s/YOUR_SCRIPT_ID/exec";
 
       try {
-        const res = await fetch(scriptUrl, {
+        const response = await fetch(scriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
+          body: JSON.stringify({
+            user_id: userId,
+            field_name: name,
+            crop: crop,
+            area_ha: areaHa,
+            polygon: JSON.stringify(coords)
+          })
         });
-        if (res.ok) {
+
+        if (response.ok) {
           document.getElementById('status').innerText = "✅ Поле збережено! Поверніться в Telegram.";
         } else {
-          throw new Error("Помилка");
+          throw new Error("Помилка сервера");
         }
       } catch (e) {
-        alert("Не вдалося зберегти. Перевірте з’єднання.");
+        alert("❌ Не вдалося зберегти. Перевірте з’єднання або URL скрипта.");
+        console.error(e);
       }
     }
   </script>
